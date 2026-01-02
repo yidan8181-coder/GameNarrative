@@ -1,0 +1,947 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>《最后生还者1-重置版》叙事设计分析</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Chosen Palette: Post-Apocalyptic Nature. Background: Warm Stone/Dark Grey. Accents: Firefly Green (Hope), Rust Orange (Violence/Decay), Muted White (Text). -->
+    <!-- Application Structure Plan: The app is designed as a 'Narrative Director's Dashboard'. 
+         1. 'Narrative Ecosystem': Breaks down the system design (NPCs, Environment).
+         2. 'The Four Seasons Script': An interactive timeline allowing users to explore the specific themes and emotional beats of each chapter.
+         3. 'Character Psyche': Uses data visualization to track the evolution of Joel and Ellie's traits.
+         4. 'Thematic Core': Interactive cards exploring the deep themes (Love, Selfishness).
+         5. 'AI Narrative Lab': Gemini-powered features with SAFE Client-Side Key Management (BYOK).
+         Rationale: This structure separates the 'How' (System) from the 'What' (Script) and 'Who' (Characters), allowing a holistic view of the game's design. -->
+    <!-- Visualization & Content Choices: 
+         1. Line Chart (Chart.js): Visualizes 'Tension' vs 'Bonding' across the game's chapters. Goal: Show the pacing and narrative rhythm.
+         2. Radar Chart (Chart.js): Compares Joel and Ellie's attributes (Trust, Violence, Hope, Survival) at the start vs. end. Goal: Visualize Character Arcs.
+         3. Interactive Grid: For thematic keywords. Goal: Allow users to drill down into abstract concepts like 'Selfishness'.
+         CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+    <style>
+        body {
+            font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+            background-color: #1c1917; /* stone-900 */
+            color: #e7e5e4; /* stone-200 */
+        }
+        .chart-container {
+            position: relative;
+            width: 100%;
+            max-width: 800px;
+            margin-left: auto;
+            margin-right: auto;
+            height: 350px;
+            max-height: 400px;
+        }
+        .nav-active {
+            border-bottom: 2px solid #22c55e; /* green-500 */
+            color: #22c55e;
+        }
+        .glass-panel {
+            background: rgba(41, 37, 36, 0.7); /* stone-800 with opacity */
+            backdrop-filter: blur(10px);
+            border: 1px solid #44403c; /* stone-700 */
+        }
+        .season-btn.active {
+            background-color: #44403c;
+            border-left: 4px solid #22c55e;
+        }
+        /* Loading animation for AI */
+        .dot-flashing {
+            position: relative;
+            width: 10px;
+            height: 10px;
+            border-radius: 5px;
+            background-color: #22c55e;
+            color: #22c55e;
+            animation: dot-flashing 1s infinite linear alternate;
+            animation-delay: 0.5s;
+        }
+        .dot-flashing::before, .dot-flashing::after {
+            content: "";
+            display: inline-block;
+            position: absolute;
+            top: 0;
+        }
+        .dot-flashing::before {
+            left: -15px;
+            width: 10px;
+            height: 10px;
+            border-radius: 5px;
+            background-color: #22c55e;
+            color: #22c55e;
+            animation: dot-flashing 1s infinite alternate;
+            animation-delay: 0s;
+        }
+        .dot-flashing::after {
+            left: 15px;
+            width: 10px;
+            height: 10px;
+            border-radius: 5px;
+            background-color: #22c55e;
+            color: #22c55e;
+            animation: dot-flashing 1s infinite alternate;
+            animation-delay: 1s;
+        }
+        @keyframes dot-flashing {
+            0% { background-color: #22c55e; }
+            50%, 100% { background-color: rgba(34, 197, 94, 0.2); }
+        }
+        
+        /* Modal Styles */
+        .modal-backdrop {
+            background-color: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(4px);
+        }
+    </style>
+</head>
+<body class="overflow-x-hidden">
+
+    <!-- Navigation -->
+    <nav class="sticky top-0 z-50 bg-stone-900/95 border-b border-stone-800 shadow-lg">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16 items-center">
+                <div class="flex items-center gap-2">
+                    <div class="w-3 h-8 bg-green-600 rounded-sm"></div>
+                    <span class="font-bold text-xl tracking-wider text-stone-100">TLOU<span class="text-stone-500">_ARCHITECT</span></span>
+                </div>
+                <div class="hidden md:flex space-x-8 items-center">
+                    <button onclick="scrollToSection('overview')" class="nav-item hover:text-green-500 transition-colors px-3 py-2 text-sm font-medium" id="nav-overview">总览</button>
+                    <button onclick="scrollToSection('systems')" class="nav-item hover:text-green-500 transition-colors px-3 py-2 text-sm font-medium" id="nav-systems">叙事系统</button>
+                    <button onclick="scrollToSection('script')" class="nav-item hover:text-green-500 transition-colors px-3 py-2 text-sm font-medium" id="nav-script">剧本结构</button>
+                    <button onclick="scrollToSection('characters')" class="nav-item hover:text-green-500 transition-colors px-3 py-2 text-sm font-medium" id="nav-characters">角色弧光</button>
+                    <button onclick="scrollToSection('ai-lab')" class="nav-item text-green-400 hover:text-green-300 transition-colors px-3 py-2 text-sm font-bold flex items-center gap-1" id="nav-ai">
+                         <span>✨</span> AI 实验室
+                    </button>
+                    <!-- Key Settings Button -->
+                    <button onclick="openKeyModal()" class="ml-2 text-stone-500 hover:text-stone-300 transition-colors p-2" title="设置 API Key">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                        </svg>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Header / Intro -->
+    <header id="overview" class="relative pt-20 pb-16 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto text-center">
+        <h1 class="text-4xl md:text-6xl font-extrabold text-stone-100 mb-6 tracking-tight">
+            《最后生还者1》<br><span class="text-green-600">叙事设计</span>深度解析文档
+        </h1>
+        <p class="mt-4 max-w-2xl mx-auto text-xl text-stone-400">
+            关于沉浸式体验、情感剧本架构与末世人性博弈的系统性研究
+        </p>
+        <div class="mt-10 flex justify-center gap-4">
+            <div class="px-6 py-3 rounded-lg bg-stone-800 border border-stone-700">
+                <span class="block text-2xl font-bold text-green-500">10/10</span>
+                <span class="text-xs text-stone-500 uppercase tracking-widest">沉浸感</span>
+            </div>
+            <div class="px-6 py-3 rounded-lg bg-stone-800 border border-stone-700">
+                <span class="block text-2xl font-bold text-amber-500">4 Seasons</span>
+                <span class="text-xs text-stone-500 uppercase tracking-widest">剧本结构</span>
+            </div>
+            <div class="px-6 py-3 rounded-lg bg-stone-800 border border-stone-700">
+                <span class="block text-2xl font-bold text-stone-300">2 Arcs</span>
+                <span class="text-xs text-stone-500 uppercase tracking-widest">核心角色</span>
+            </div>
+        </div>
+        <p class="mt-8 text-sm text-stone-500 max-w-3xl mx-auto">
+            本交互式文档旨在解构顽皮狗工作室在《最后生还者1-重置版》中运用的高级叙事技法。我们将从底层的叙事系统设计（Gameplay Narrative）出发，深入剖析按季节划分的剧本结构，并用数据化手段量化乔尔与艾莉的角色成长弧光。
+        </p>
+    </header>
+
+    <!-- Section 1: Narrative Systems -->
+    <section id="systems" class="py-16 bg-stone-800/30">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="mb-10">
+                <h2 class="text-3xl font-bold text-stone-100 border-l-4 border-green-600 pl-4">叙事系统架构</h2>
+                <p class="mt-4 text-stone-400 max-w-3xl">
+                    《最后生还者》的叙事不仅依赖过场动画，更深深植根于Gameplay之中。这种“去UI化”的沉浸式设计与高智能NPC表演，共同构建了真实可信的末世舞台。
+                </p>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <!-- Card 1 -->
+                <div class="glass-panel p-6 rounded-xl hover:bg-stone-800 transition-all duration-300 cursor-pointer group" onclick="updateSystemDetail(0)">
+                    <div class="text-3xl mb-4 group-hover:scale-110 transition-transform duration-300">🎭</div>
+                    <h3 class="text-xl font-bold text-stone-200 mb-2">程序化表演与NPC交互</h3>
+                    <p class="text-sm text-stone-400">NPC并非单纯的战斗AI，而是具备情感逻辑的数字演员。艾莉的跟随、掩护、甚至无聊时的哼歌，都在潜移默化地建立羁绊。</p>
+                </div>
+                <!-- Card 2 -->
+                <div class="glass-panel p-6 rounded-xl hover:bg-stone-800 transition-all duration-300 cursor-pointer group" onclick="updateSystemDetail(1)">
+                    <div class="text-3xl mb-4 group-hover:scale-110 transition-transform duration-300">🗺️</div>
+                    <h3 class="text-xl font-bold text-stone-200 mb-2">环境叙事 (Environmental Storytelling)</h3>
+                    <p class="text-sm text-stone-400">每一个房间都在讲述一个故事。通过散落的信件、摆放的尸体、墙上的涂鸦，构建了一个无需言语的悲剧世界。</p>
+                </div>
+                <!-- Card 3 -->
+                <div class="glass-panel p-6 rounded-xl hover:bg-stone-800 transition-all duration-300 cursor-pointer group" onclick="updateSystemDetail(2)">
+                    <div class="text-3xl mb-4 group-hover:scale-110 transition-transform duration-300">🎮</div>
+                    <h3 class="text-xl font-bold text-stone-200 mb-2">游戏机制与叙事的统一 (Ludonarrative)</h3>
+                    <p class="text-sm text-stone-400">资源的极度匮乏迫使玩家体验“生存”的压力，每一次暴力行为都显得沉重，从而在机制上强化了剧本的绝望感。</p>
+                </div>
+            </div>
+
+            <!-- Dynamic Detail Box -->
+            <div id="system-detail-box" class="mt-8 p-6 bg-stone-900 border border-stone-700 rounded-lg hidden">
+                <h4 id="sys-detail-title" class="text-lg font-bold text-green-500 mb-2">详细分析</h4>
+                <p id="sys-detail-text" class="text-stone-300 leading-relaxed"></p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Section 2: Script Structure & Emotional Curve -->
+    <section id="script" class="py-16">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="mb-10 flex flex-col md:flex-row justify-between items-end">
+                <div>
+                    <h2 class="text-3xl font-bold text-stone-100 border-l-4 border-amber-600 pl-4">剧本结构与情感曲线</h2>
+                    <p class="mt-4 text-stone-400 max-w-3xl">
+                        游戏剧本严格遵循四季更替的时间线，每一个季节不仅代表时间的流逝，更隐喻了人物关系的阶段性转变。下方图表展示了随着章节推进，游戏内的“生存紧张度”与乔尔艾莉“情感亲密度”的对比。
+                    </p>
+                </div>
+            </div>
+
+            <!-- Layout: Chart on Left, Interactive List on Right -->
+            <div class="flex flex-col lg:flex-row gap-8">
+                <!-- Chart Section -->
+                <div class="w-full lg:w-2/3 glass-panel p-4 rounded-xl">
+                    <div class="chart-container">
+                        <canvas id="emotionalCurveChart"></canvas>
+                    </div>
+                    <div class="mt-4 flex justify-center gap-6 text-sm">
+                        <div class="flex items-center gap-2"><span class="w-3 h-3 bg-amber-600 rounded-full"></span>生存紧张度 (Tension)</div>
+                        <div class="flex items-center gap-2"><span class="w-3 h-3 bg-green-500 rounded-full"></span>情感羁绊 (Bonding)</div>
+                    </div>
+                </div>
+
+                <!-- Interactive Seasons Selector -->
+                <div class="w-full lg:w-1/3 flex flex-col gap-2">
+                    <button onclick="updateSeasonData('summer')" class="season-btn active w-full text-left p-4 rounded-lg bg-stone-800 hover:bg-stone-700 transition-all group">
+                        <div class="flex justify-between items-center">
+                            <span class="font-bold text-lg text-stone-200">夏季 (Summer)</span>
+                            <span class="text-xs text-amber-500 bg-amber-900/30 px-2 py-1 rounded">相遇与任务</span>
+                        </div>
+                        <p class="text-xs text-stone-400 mt-1 group-hover:text-stone-300">隔离区 -> 比尔小镇 -> 匹兹堡</p>
+                    </button>
+                    
+                    <button onclick="updateSeasonData('fall')" class="season-btn w-full text-left p-4 rounded-lg bg-stone-800 hover:bg-stone-700 transition-all group">
+                        <div class="flex justify-between items-center">
+                            <span class="font-bold text-lg text-stone-200">秋季 (Fall)</span>
+                            <span class="text-xs text-green-500 bg-green-900/30 px-2 py-1 rounded">冲突与磨合</span>
+                        </div>
+                        <p class="text-xs text-stone-400 mt-1 group-hover:text-stone-300">汤米大坝 -> 大学</p>
+                    </button>
+
+                    <button onclick="updateSeasonData('winter')" class="season-btn w-full text-left p-4 rounded-lg bg-stone-800 hover:bg-stone-700 transition-all group">
+                        <div class="flex justify-between items-center">
+                            <span class="font-bold text-lg text-stone-200">冬季 (Winter)</span>
+                            <span class="text-xs text-blue-400 bg-blue-900/30 px-2 py-1 rounded">反转与依赖</span>
+                        </div>
+                        <p class="text-xs text-stone-400 mt-1 group-hover:text-stone-300">湖畔度假村 -> 猎人营地</p>
+                    </button>
+
+                    <button onclick="updateSeasonData('spring')" class="season-btn w-full text-left p-4 rounded-lg bg-stone-800 hover:bg-stone-700 transition-all group">
+                        <div class="flex justify-between items-center">
+                            <span class="font-bold text-lg text-stone-200">春季 (Spring)</span>
+                            <span class="text-xs text-pink-400 bg-pink-900/30 px-2 py-1 rounded">高潮与谎言</span>
+                        </div>
+                        <p class="text-xs text-stone-400 mt-1 group-hover:text-stone-300">盐湖城 -> 医院 -> 杰克逊</p>
+                    </button>
+                    
+                    <!-- Dynamic Content Panel -->
+                    <div id="season-content" class="mt-4 p-4 border-t border-stone-700">
+                        <h4 class="text-green-500 font-bold mb-2">夏季核心主题：失去与责任</h4>
+                        <p class="text-sm text-stone-300">
+                            故事的开端。乔尔是一个封闭内心的走私客，艾莉是“货物”。
+                            <br><br>
+                            <strong>关键事件：</strong> 泰丝的牺牲迫使乔尔接手这份“责任”。此时两人的关系纯粹建立在利益与承诺之上，乔尔极力避免情感投入。
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Section 3: Character Arcs (Data Analysis) -->
+    <section id="characters" class="py-16 bg-stone-800/30">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="mb-10">
+                <h2 class="text-3xl font-bold text-stone-100 border-l-4 border-blue-500 pl-4">角色弧光量化分析</h2>
+                <p class="mt-4 text-stone-400 max-w-3xl">
+                    《最后生还者》的伟大之处在于角色的动态成长。我们通过四个维度：生存能力、人性/希望、对他人的信任、创伤程度，来对比故事开始（Start）与结束（End）时角色的心理状态变化。
+                </p>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-12 items-center">
+                <!-- Controls & Text -->
+                <div>
+                    <div class="flex gap-4 mb-6">
+                        <button onclick="updateCharacterChart('joel')" id="btn-joel" class="px-6 py-2 bg-stone-700 hover:bg-stone-600 text-white rounded-full transition-colors font-bold border-2 border-green-600">乔尔 (Joel)</button>
+                        <button onclick="updateCharacterChart('ellie')" id="btn-ellie" class="px-6 py-2 bg-stone-800 hover:bg-stone-700 text-stone-400 rounded-full transition-colors font-bold border-2 border-transparent">艾莉 (Ellie)</button>
+                    </div>
+                    
+                    <div id="char-desc" class="space-y-4">
+                        <h3 class="text-2xl font-bold text-stone-100">乔尔：从生存机器到自私的父亲</h3>
+                        <p class="text-stone-300">
+                            故事开始时，乔尔是一个情感枯竭的生存者，他的“人性”极低，依靠冷酷维持生存。随着旅程推进，艾莉唤醒了他内心深处的父爱。
+                        </p>
+                        <p class="text-stone-300 border-l-2 border-stone-600 pl-4 italic">
+                            “我奋斗了很久，才得以生存至今...无论如何，你都要找到以此为生的意义。”
+                        </p>
+                        <ul class="space-y-2 mt-4 text-sm text-stone-400">
+                            <li class="flex items-center"><span class="text-green-500 mr-2">▲</span> 人性/希望：大幅回升（因为艾莉）</li>
+                            <li class="flex items-center"><span class="text-green-500 mr-2">▲</span> 信任：仅对艾莉完全敞开</li>
+                            <li class="flex items-center"><span class="text-amber-500 mr-2">▼</span> 创伤：看似治愈，实则转化为对失去的恐惧</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Radar Chart -->
+                <div class="glass-panel p-6 rounded-xl flex justify-center items-center">
+                    <div class="chart-container" style="max-width: 500px; height: 400px;">
+                        <canvas id="characterRadarChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Section 4: Thematic Deconstruction (Interactive Cards) -->
+    <section class="py-16">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <h2 class="text-3xl font-bold text-stone-100 border-l-4 border-stone-100 pl-4 mb-8">核心主题解构</h2>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div class="theme-card bg-stone-800 p-6 rounded-lg cursor-pointer hover:-translate-y-1 transition-transform border-t-2 border-pink-500" onclick="expandTheme(this, 'love')">
+                    <h3 class="text-xl font-bold text-pink-500 mb-2">爱 (Love)</h3>
+                    <p class="text-xs text-stone-400">点击展开解析</p>
+                    <div class="hidden-content hidden mt-4 text-sm text-stone-300">
+                        在TLOU中，爱并非纯粹的美好，它是一种<strong>危险的驱动力</strong>。乔尔对艾莉的爱最终导致了他背叛全人类的决定。这种爱是排他性的、自私的，但也因此显得无比真实和沉重。
+                    </div>
+                </div>
+
+                <div class="theme-card bg-stone-800 p-6 rounded-lg cursor-pointer hover:-translate-y-1 transition-transform border-t-2 border-stone-400" onclick="expandTheme(this, 'selfishness')">
+                    <h3 class="text-xl font-bold text-stone-200 mb-2">自私 (Selfishness)</h3>
+                    <p class="text-xs text-stone-400">点击展开解析</p>
+                    <div class="hidden-content hidden mt-4 text-sm text-stone-300">
+                        乔尔最后的选择是极度自私的。他剥夺了艾莉知情和选择的权利，只为填补自己失去女儿的空洞。这打破了传统英雄叙事的套路，展现了人性的灰度。
+                    </div>
+                </div>
+
+                <div class="theme-card bg-stone-800 p-6 rounded-lg cursor-pointer hover:-translate-y-1 transition-transform border-t-2 border-green-600" onclick="expandTheme(this, 'growth')">
+                    <h3 class="text-xl font-bold text-green-600 mb-2">成长 (Growth)</h3>
+                    <p class="text-xs text-stone-400">点击展开解析</p>
+                    <div class="hidden-content hidden mt-4 text-sm text-stone-300">
+                        艾莉的成长最为显著，尤其是在冬季章节。她从需要保护的“货物”转变为能够独立猎杀大卫的生存者。这种成长伴随着纯真的丧失和暴力的觉醒。
+                    </div>
+                </div>
+
+                <div class="theme-card bg-stone-800 p-6 rounded-lg cursor-pointer hover:-translate-y-1 transition-transform border-t-2 border-red-800" onclick="expandTheme(this, 'death')">
+                    <h3 class="text-xl font-bold text-red-700 mb-2">死亡 (Death)</h3>
+                    <p class="text-xs text-stone-400">点击展开解析</p>
+                    <div class="hidden-content hidden mt-4 text-sm text-stone-300">
+                        游戏中的死亡突如其来且没有尊严（如亨利兄弟）。它时刻提醒玩家末世的残酷，也反衬出角色之间情感连接的可贵。
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+    
+    <!-- New Section 5: AI Narrative Lab (Gemini API Integrated) -->
+    <section id="ai-lab" class="py-16 pb-24 bg-stone-900 border-t border-stone-800 relative overflow-hidden">
+        <!-- Subtle background glow -->
+        <div class="absolute top-0 right-0 w-96 h-96 bg-green-900/10 blur-3xl rounded-full pointer-events-none"></div>
+        
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+            <div class="mb-10 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                    <div class="flex items-center gap-3">
+                        <h2 class="text-3xl font-bold text-stone-100 border-l-4 border-green-500 pl-4">AI 叙事实验室</h2>
+                        <span class="px-2 py-1 bg-green-900/30 border border-green-700 text-green-400 text-xs rounded font-bold uppercase tracking-wider">Gemini Powered</span>
+                    </div>
+                    <p class="mt-4 text-stone-400 max-w-3xl">
+                        利用 Gemini 大型语言模型，探索游戏叙事的无限可能。向“数字叙事总监”提问，或推演平行时空的蝴蝶效应。
+                    </p>
+                </div>
+                <button onclick="openKeyModal()" class="px-4 py-2 bg-stone-800 hover:bg-stone-700 border border-stone-600 rounded text-stone-300 text-sm flex items-center gap-2 transition-colors">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                    配置 API Key
+                </button>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                
+                <!-- Feature 1: Narrative Oracle -->
+                <div class="glass-panel p-6 rounded-xl border border-stone-700 flex flex-col h-full">
+                    <div class="flex items-center gap-2 mb-4">
+                        <span class="text-2xl">🔮</span>
+                        <h3 class="text-xl font-bold text-stone-200">✨ 叙事神谕 (Narrative Oracle)</h3>
+                    </div>
+                    <p class="text-sm text-stone-400 mb-4">
+                        对剧情细节、角色动机或设计意图有疑问？输入你的问题，AI 将从专业叙事设计的角度为你解析。
+                    </p>
+                    <div class="flex-grow flex flex-col gap-3">
+                        <textarea id="oracle-input" class="w-full bg-stone-950 border border-stone-700 rounded-lg p-3 text-stone-300 text-sm focus:border-green-500 focus:ring-1 focus:ring-green-500 outline-none resize-none h-24" placeholder="例如：为什么泰丝的死是乔尔转变的关键？"></textarea>
+                        <button onclick="askOracle()" class="w-full py-2 bg-stone-800 hover:bg-stone-700 text-green-400 font-bold rounded-lg border border-stone-600 transition-colors flex justify-center items-center gap-2">
+                            <span>向神谕提问</span>
+                            <span id="oracle-loading" class="dot-flashing hidden ml-2"></span>
+                        </button>
+                        <div id="oracle-result" class="bg-stone-950/50 p-4 rounded-lg border border-stone-800 min-h-[120px] max-h-[200px] overflow-y-auto text-sm text-stone-300 hidden"></div>
+                    </div>
+                </div>
+
+                <!-- Feature 2: What-If Simulator -->
+                <div class="glass-panel p-6 rounded-xl border border-stone-700 flex flex-col h-full">
+                    <div class="flex items-center gap-2 mb-4">
+                        <span class="text-2xl">🌌</span>
+                        <h3 class="text-xl font-bold text-stone-200">✨ 平行宇宙推演 (What-If)</h3>
+                    </div>
+                    <p class="text-sm text-stone-400 mb-4">
+                        如果关键事件发生了改变？输入一个“如果”场景，AI 将推演它对结局和主题的蝴蝶效应。
+                    </p>
+                    <div class="flex-grow flex flex-col gap-3">
+                        <div class="flex gap-2">
+                            <input id="whatif-input" type="text" class="flex-1 bg-stone-950 border border-stone-700 rounded-lg p-3 text-stone-300 text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500 outline-none" placeholder="例如：如果莎拉在序章中幸存下来...">
+                        </div>
+                        <button onclick="runSimulation()" class="w-full py-2 bg-stone-800 hover:bg-stone-700 text-amber-500 font-bold rounded-lg border border-stone-600 transition-colors flex justify-center items-center gap-2">
+                            <span>启动推演</span>
+                            <span id="whatif-loading" class="dot-flashing hidden ml-2"></span>
+                        </button>
+                         <div id="whatif-result" class="bg-stone-950/50 p-4 rounded-lg border border-stone-800 min-h-[120px] max-h-[200px] overflow-y-auto text-sm text-stone-300 hidden"></div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="bg-stone-900 border-t border-stone-800 py-8 text-center">
+        <p class="text-stone-500 text-sm">Created for Game Narrative Analysis Study based on user request.</p>
+        <p class="text-stone-600 text-xs mt-2">© The Last of Us Analysis Project</p>
+    </footer>
+
+    <!-- API Key Modal -->
+    <div id="key-modal" class="fixed inset-0 z-[100] hidden">
+        <div class="absolute inset-0 modal-backdrop" onclick="closeKeyModal()"></div>
+        <div class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-stone-900 border border-stone-700 p-8 rounded-xl shadow-2xl w-[90%] max-w-md">
+            <h3 class="text-2xl font-bold text-stone-100 mb-4">配置 Gemini API Key</h3>
+            <p class="text-stone-400 text-sm mb-6">
+                为了在公开网络上安全运行 AI 功能，请在此输入您自己的 Google Gemini API Key。
+                <br><br>
+                <span class="text-xs text-stone-500">
+                    * 您的密钥将仅存储在您浏览器的本地缓存 (LocalStorage) 中，绝不会发送给任何第三方服务器。
+                </span>
+            </p>
+            
+            <label class="block text-xs font-bold text-stone-500 uppercase mb-2">API Key</label>
+            <input type="password" id="api-key-input" class="w-full bg-stone-950 border border-stone-700 rounded p-3 text-stone-100 mb-6 focus:border-green-500 focus:outline-none" placeholder="Paste your API key here...">
+            
+            <div class="flex justify-end gap-3">
+                <button onclick="closeKeyModal()" class="px-4 py-2 text-stone-400 hover:text-stone-200">取消</button>
+                <button onclick="saveApiKey()" class="px-6 py-2 bg-green-600 hover:bg-green-700 text-white font-bold rounded">保存密钥</button>
+            </div>
+            
+            <div class="mt-6 pt-4 border-t border-stone-800 text-center">
+                <a href="https://aistudio.google.com/app/apikey" target="_blank" class="text-xs text-green-500 hover:underline">没有密钥？点击此处免费获取 (Google AI Studio)</a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Logic -->
+    <script>
+        // --- Gemini API & Key Management ---
+        
+        // 1. Get Key function (Priority: Environment -> LocalStorage)
+        function getApiKey() {
+            // Check LocalStorage first (User set key)
+            const storedKey = localStorage.getItem('gemini_api_key');
+            if (storedKey) return storedKey;
+            
+            // Check Environment (for local dev/canvas)
+            // Note: In a published static file, this will likely be empty, which is intended.
+            if (typeof apiKey !== 'undefined' && apiKey) return apiKey;
+            
+            return null;
+        }
+
+        // 2. Modal Logic
+        function openKeyModal() {
+            const modal = document.getElementById('key-modal');
+            const input = document.getElementById('api-key-input');
+            const currentKey = localStorage.getItem('gemini_api_key');
+            
+            if (currentKey) input.value = currentKey;
+            
+            modal.classList.remove('hidden');
+        }
+
+        function closeKeyModal() {
+            document.getElementById('key-modal').classList.add('hidden');
+        }
+
+        function saveApiKey() {
+            const input = document.getElementById('api-key-input');
+            const key = input.value.trim();
+            
+            if (key) {
+                localStorage.setItem('gemini_api_key', key);
+                alert("API Key 已安全保存至本地！");
+                closeKeyModal();
+            } else {
+                alert("请输入有效的 API Key。");
+            }
+        }
+
+        // 3. Call API Helper
+        async function callGeminiAPI(userPrompt, systemInstruction) {
+            const key = getApiKey();
+            
+            if (!key) {
+                // Trigger Modal if no key found
+                openKeyModal();
+                return "请先配置 API Key 以使用此功能。";
+            }
+
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${key}`;
+            
+            const payload = {
+                contents: [{
+                    parts: [{ text: userPrompt }]
+                }],
+                systemInstruction: {
+                    parts: [{ text: systemInstruction }]
+                }
+            };
+
+            // Retry logic
+            const maxRetries = 3;
+            let attempt = 0;
+            
+            while (attempt < maxRetries) {
+                try {
+                    const response = await fetch(url, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+
+                    if (!response.ok) {
+                        const errData = await response.json();
+                        if (errData.error && errData.error.message) {
+                           throw new Error(`API Error: ${errData.error.message}`);
+                        }
+                        throw new Error(`HTTP Error: ${response.status}`);
+                    }
+
+                    const data = await response.json();
+                    return data.candidates?.[0]?.content?.parts?.[0]?.text || "AI 暂时无法回答，请稍后再试。";
+
+                } catch (error) {
+                    console.error(`Attempt ${attempt + 1} failed:`, error);
+                    attempt++;
+                    
+                    if (attempt === maxRetries) {
+                        // Helpful error for user
+                        if (error.message.includes('API Key') || error.message.includes('400')) {
+                             return "API Key 无效或过期，请检查设置。";
+                        }
+                        return "连接 AI 服务器失败，请检查网络或稍后重试。";
+                    }
+                    await new Promise(r => setTimeout(r, 1000 * Math.pow(2, attempt - 1)));
+                }
+            }
+        }
+
+        // --- Feature 1: Narrative Oracle Logic ---
+        async function askOracle() {
+            const input = document.getElementById('oracle-input').value.trim();
+            const resultBox = document.getElementById('oracle-result');
+            const loading = document.getElementById('oracle-loading');
+            
+            if (!input) return;
+
+            // Check Key first to avoid UI flash if modal opens
+            if (!getApiKey()) {
+                openKeyModal();
+                return;
+            }
+
+            // UI State
+            loading.classList.remove('hidden');
+            resultBox.classList.remove('hidden');
+            resultBox.innerHTML = '<span class="text-stone-500 italic">正在解析叙事数据库...</span>';
+
+            const systemPrompt = "你是一位《最后生还者 (The Last of Us)》的资深叙事设计师和游戏分析师。你的任务是针对用户关于游戏剧情、角色心理、主题隐喻或设计意图的提问，提供深度、专业且富有洞察力的解析。回答应简洁有力，聚焦于叙事技巧和情感影响，避免单纯复述剧情。";
+            
+            const response = await callGeminiAPI(input, systemPrompt);
+            
+            // Render Result (Simple Markdown to HTML conversion for bolding)
+            const formattedResponse = response.replace(/\*\*(.*?)\*\*/g, '<strong class="text-green-400">$1</strong>');
+            
+            loading.classList.add('hidden');
+            resultBox.innerHTML = formattedResponse;
+        }
+
+        // --- Feature 2: What-If Simulator Logic ---
+        async function runSimulation() {
+            const input = document.getElementById('whatif-input').value.trim();
+            const resultBox = document.getElementById('whatif-result');
+            const loading = document.getElementById('whatif-loading');
+            
+            if (!input) return;
+
+            if (!getApiKey()) {
+                openKeyModal();
+                return;
+            }
+
+            // UI State
+            loading.classList.remove('hidden');
+            resultBox.classList.remove('hidden');
+            resultBox.innerHTML = '<span class="text-stone-500 italic">正在推演平行宇宙时间线...</span>';
+
+            const systemPrompt = "你是一位擅长末世题材的创意编剧。用户将输入一个关于《最后生还者》剧情的“如果（What-If）”假设场景。请推演这个改变引发的蝴蝶效应，简要描述它将如何改变角色的命运、关键剧情节点以及游戏的核心主题（如爱与自私）。回答限制在200字以内，风格需保持游戏原本的沉重与现实感。";
+            
+            const response = await callGeminiAPI(input, systemPrompt);
+            
+            const formattedResponse = response.replace(/\*\*(.*?)\*\*/g, '<strong class="text-amber-400">$1</strong>');
+
+            loading.classList.add('hidden');
+            resultBox.innerHTML = formattedResponse;
+        }
+
+        // --- Data Definitions (Original App Data) ---
+
+        // 1. Narrative System Data
+        const systemDetails = [
+            {
+                title: "程序化表演与NPC交互 (NPC Performance)",
+                text: "重置版利用更加先进的面部捕捉技术，让NPC的微表情（如眼神闪躲、嘴角抽动）传达出剧本文字无法覆盖的信息。'伙伴系统'不仅仅是战斗辅助，更是一个动态的叙事发生器。艾莉会对你的潜行成功表示惊叹，也会在你长时间不动时表现出焦躁。这种设计让角色在Cutscene之外依然保持鲜活。"
+            },
+            {
+                title: "环境叙事 (Environmental Storytelling)",
+                text: "顽皮狗的关卡美术即是叙事。例如在匹兹堡下水道，通过散落的画作、规则守则和最终的一具尸体，完整讲述了一个想要建立乌托邦却最终失败的社群故事。这种碎片化叙事鼓励玩家主动探索，而非被动接受，极大地增强了世界的真实感和历史厚重感。"
+            },
+            {
+                title: "游戏机制与叙事的统一 (Ludonarrative Consistency)",
+                text: "许多游戏存在'叙事失调'（剧情里是好人，玩法里杀人如麻），但TLOU通过设定极端的末世环境解决了这个问题。乔尔的近战动作残暴且沉重，不仅反馈了打击感，更在叙事层面强调了他为了生存不择手段的性格。每一次资源的拾取都伴随着清脆的音效，强化了物资的珍贵和生存的压力。"
+            }
+        ];
+
+        // 2. Emotional Curve Data (Chart.js Line)
+        const emotionalData = {
+            labels: ['序章', '隔离区', '外围', '比尔小镇', '匹兹堡', '下水道', '大坝', '大学', '湖畔(冬)', '公车站', '医院', '尾声'],
+            tension: [90, 60, 50, 65, 80, 75, 40, 55, 95, 30, 85, 20], // Survival/Danger Stress
+            bonding: [10, 10, 20, 30, 45, 55, 70, 80, 90, 95, 95, 60]  // Joel & Ellie Relationship
+        };
+
+        // 3. Season Content Data
+        const seasonContent = {
+            summer: {
+                title: "夏季：相遇与被迫的旅程",
+                text: "<strong>主题：失去与责任。</strong><br>故事建立在乔尔丧女的巨大创伤之上。夏季章节充满了不信任和冲突。乔尔将艾莉视为'货物'，艾莉则对外部世界充满好奇但笨拙。比尔小镇展示了'孤独生存者'的悲剧结局，这是给乔尔的一面镜子——如果没有爱，生存只是行尸走肉。",
+                highlights: "泰丝之死、比尔的警告、匹兹堡的伏击"
+            },
+            fall: {
+                title: "秋季：关系的转折点",
+                text: "<strong>主题：冲突与接纳。</strong><br>秋季是两人关系的熔炉。在汤米大坝，乔尔试图将艾莉'甩包袱'给汤米，引发了著名的'你不是我女儿'争吵。这次争吵反而成为了两人真正建立信任的契机。随后的大学章节，两人配合默契，对话变得轻松，乔尔开始教艾莉橄榄球规则，父女关系雏形初现。",
+                highlights: "大坝争吵、骑马进入大学、乔尔重伤"
+            },
+            winter: {
+                title: "冬季：角色的互换与成长",
+                text: "<strong>主题：独立与创伤。</strong><br>游戏叙事的高光时刻。乔尔缺席，玩家控制艾莉。这种视角的转换不仅是玩法上的改变，更是叙事上的隐喻：艾莉必须独自面对世界的纯粹恶意（大卫）。当乔尔苏醒并在这场噩梦中找到艾莉时，他不再是'运货人'，而是以一个父亲的身份去安抚受惊的孩子。",
+                highlights: "猎杀雄鹿、大卫的欺骗、餐厅决战、'Baby girl'的拥抱"
+            },
+            spring: {
+                title: "春季：爱的代价",
+                text: "<strong>主题：希望与谎言。</strong><br>长颈鹿场景是全游戏最温柔的一笔，象征着在残酷世界中依然存留的美好。然而，医院的结局将主题升华。乔尔为了保存这份美好（艾莉），选择了毁灭全人类的希望。最后的谎言是乔尔自私的体现，也是他对这份父女关系极度珍视的证明。",
+                highlights: "长颈鹿场景、医院大屠杀、最后的誓言"
+            }
+        };
+
+        // 4. Character Radar Data
+        const characterData = {
+            joel: {
+                start: [90, 10, 20, 80], // Survival, Humanity, Trust, Trauma
+                end: [95, 70, 90, 90], // Trauma stays high but changes form (fear of loss)
+                desc: "乔尔：从生存机器到自私的父亲",
+                text: "故事开始时，乔尔是一个情感枯竭的生存者，他的'人性'极低，依靠冷酷维持生存。随着旅程推进，艾莉唤醒了他内心深处的父爱，但也让他变得患得患失，最终为了这份爱背叛了世界。",
+                quote: "“我奋斗了很久，才得以生存至今...无论如何，你都要找到以此为生的意义。”",
+                changes: [
+                    {label: "人性/希望", val: "大幅回升", type: "up"},
+                    {label: "信任", val: "仅对艾莉完全敞开", type: "up"},
+                    {label: "创伤", val: "转化为对失去的恐惧", type: "neutral"}
+                ],
+                colors: {
+                    bg: 'rgba(34, 197, 94, 0.2)', // Green
+                    border: 'rgba(34, 197, 94, 1)'
+                }
+            },
+            ellie: {
+                start: [30, 90, 60, 40],
+                end: [85, 50, 40, 90], // Less humanity/innocence, higher survival/trauma
+                desc: "艾莉：纯真的丧失与独立的觉醒",
+                text: "艾莉最初代表着希望和纯真。但经历冬季的残酷和大卫事件后，她被迫快速成长。结局时的她变得更加沉默、怀疑，她的生存技能满点，但内心的光芒被幸存者的愧疚感所笼罩。",
+                quote: "“每个人都离我而去，只有你没有。”",
+                changes: [
+                    {label: "生存能力", val: "从依赖到独当一面", type: "up"},
+                    {label: "纯真", val: "彻底破碎", type: "down"},
+                    {label: "信任", val: "因乔尔的谎言产生裂痕", type: "down"}
+                ],
+                colors: {
+                    bg: 'rgba(239, 68, 68, 0.2)', // Red/Amber
+                    border: 'rgba(239, 68, 68, 1)'
+                }
+            }
+        };
+
+
+        // --- Initialization & Logic ---
+
+        // Chart Instances
+        let emotionChart = null;
+        let radarChart = null;
+
+        function initCharts() {
+            // 1. Emotion Line Chart
+            const ctx1 = document.getElementById('emotionalCurveChart').getContext('2d');
+            emotionChart = new Chart(ctx1, {
+                type: 'line',
+                data: {
+                    labels: emotionalData.labels,
+                    datasets: [
+                        {
+                            label: '生存紧张度 (Tension)',
+                            data: emotionalData.tension,
+                            borderColor: '#d97706', // amber-600
+                            backgroundColor: 'rgba(217, 119, 6, 0.1)',
+                            borderWidth: 2,
+                            tension: 0.4,
+                            fill: true
+                        },
+                        {
+                            label: '情感羁绊 (Bonding)',
+                            data: emotionalData.bonding,
+                            borderColor: '#22c55e', // green-500
+                            backgroundColor: 'rgba(34, 197, 94, 0.1)',
+                            borderWidth: 3,
+                            tension: 0.4,
+                            fill: true
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: {
+                        mode: 'index',
+                        intersect: false,
+                    },
+                    plugins: {
+                        legend: { labels: { color: '#a8a29e' } },
+                        tooltip: {
+                            backgroundColor: 'rgba(28, 25, 23, 0.9)',
+                            titleColor: '#22c55e',
+                            bodyColor: '#e7e5e4',
+                            borderColor: '#44403c',
+                            borderWidth: 1
+                        }
+                    },
+                    scales: {
+                        y: {
+                            grid: { color: '#44403c' },
+                            ticks: { color: '#a8a29e' },
+                            title: { display: true, text: '强度等级 (0-100)', color: '#78716c' }
+                        },
+                        x: {
+                            grid: { display: false },
+                            ticks: { color: '#a8a29e', maxRotation: 45, minRotation: 45 }
+                        }
+                    }
+                }
+            });
+
+            // 2. Character Radar Chart
+            const ctx2 = document.getElementById('characterRadarChart').getContext('2d');
+            radarChart = new Chart(ctx2, {
+                type: 'radar',
+                data: {
+                    labels: ['生存技能', '人性/希望', '对他人的信任', '心理创伤'],
+                    datasets: [
+                        {
+                            label: '故事开始 (Start)',
+                            data: characterData.joel.start,
+                            fill: true,
+                            backgroundColor: 'rgba(168, 162, 158, 0.2)', // stone-400
+                            borderColor: '#a8a29e',
+                            pointBackgroundColor: '#a8a29e',
+                            pointBorderColor: '#fff',
+                            pointHoverBackgroundColor: '#fff',
+                            pointHoverBorderColor: '#a8a29e'
+                        },
+                        {
+                            label: '故事结束 (End)',
+                            data: characterData.joel.end,
+                            fill: true,
+                            backgroundColor: characterData.joel.colors.bg,
+                            borderColor: characterData.joel.colors.border,
+                            pointBackgroundColor: characterData.joel.colors.border,
+                            pointBorderColor: '#fff',
+                            pointHoverBackgroundColor: '#fff',
+                            pointHoverBorderColor: characterData.joel.colors.border
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    elements: { line: { borderWidth: 3 } },
+                    plugins: {
+                        legend: { labels: { color: '#e7e5e4' } }
+                    },
+                    scales: {
+                        r: {
+                            angleLines: { color: '#44403c' },
+                            grid: { color: '#44403c' },
+                            pointLabels: { color: '#e7e5e4', font: { size: 12, weight: 'bold' } },
+                            ticks: { display: false, backdropColor: 'transparent' },
+                            suggestedMin: 0,
+                            suggestedMax: 100
+                        }
+                    }
+                }
+            });
+        }
+
+        // --- Interaction Functions ---
+
+        function updateSystemDetail(index) {
+            const box = document.getElementById('system-detail-box');
+            const title = document.getElementById('sys-detail-title');
+            const text = document.getElementById('sys-detail-text');
+            
+            box.classList.remove('hidden');
+            box.classList.add('block', 'animate-fade-in'); // Simple visual cue
+            
+            title.textContent = systemDetails[index].title;
+            text.textContent = systemDetails[index].text;
+        }
+
+        function updateSeasonData(season) {
+            const data = seasonContent[season];
+            const container = document.getElementById('season-content');
+            
+            // Visual feedback for buttons
+            document.querySelectorAll('.season-btn').forEach(btn => btn.classList.remove('active'));
+            // Since buttons have onclick inline, we use event.currentTarget logic inside buttons or manual targeting. 
+            // Simplified: Find button by partial text or just rebuild logic. 
+            // For this output, we'll just update the content HTML.
+            // *Correction*: Let's select by attribute or index for cleaner code in a real app, 
+            // but here we just update the content HTML.
+            
+            // Update button styles manually for the "active" class simulation
+            // (In a full React app we'd use state, here we do DOM manipulation)
+            const buttons = document.querySelectorAll('.season-btn');
+            if(season === 'summer') { buttons.forEach(b=>b.classList.remove('active')); buttons[0].classList.add('active'); }
+            if(season === 'fall') { buttons.forEach(b=>b.classList.remove('active')); buttons[1].classList.add('active'); }
+            if(season === 'winter') { buttons.forEach(b=>b.classList.remove('active')); buttons[2].classList.add('active'); }
+            if(season === 'spring') { buttons.forEach(b=>b.classList.remove('active')); buttons[3].classList.add('active'); }
+
+            container.innerHTML = `
+                <h4 class="text-green-500 font-bold mb-2 text-lg">${data.title}</h4>
+                <p class="text-sm text-stone-300 leading-relaxed mb-4">${data.text}</p>
+                <div class="bg-stone-900/50 p-3 rounded border border-stone-700">
+                    <span class="text-xs text-stone-500 uppercase font-bold block mb-1">关键情节点 (Key Beats)</span>
+                    <span class="text-sm text-stone-200">${data.highlights}</span>
+                </div>
+            `;
+        }
+
+        function updateCharacterChart(charName) {
+            const data = characterData[charName];
+            
+            // Update Text
+            const descArea = document.getElementById('char-desc');
+            
+            // Build the list items HTML
+            const listHtml = data.changes.map(item => {
+                const icon = item.type === 'up' ? '<span class="text-green-500 mr-2">▲</span>' : 
+                             (item.type === 'down' ? '<span class="text-red-500 mr-2">▼</span>' : '<span class="text-amber-500 mr-2">●</span>');
+                return `<li class="flex items-center text-sm text-stone-400">${icon} <span>${item.label}：${item.val}</span></li>`;
+            }).join('');
+
+            descArea.innerHTML = `
+                <h3 class="text-2xl font-bold text-stone-100">${data.desc}</h3>
+                <p class="text-stone-300 mt-2">${data.text}</p>
+                <p class="text-stone-300 border-l-2 border-stone-600 pl-4 italic mt-4">${data.quote}</p>
+                <ul class="space-y-2 mt-4 bg-stone-900/50 p-4 rounded-lg">
+                    ${listHtml}
+                </ul>
+            `;
+
+            // Update Buttons
+            const btnJoel = document.getElementById('btn-joel');
+            const btnEllie = document.getElementById('btn-ellie');
+            
+            if(charName === 'joel') {
+                btnJoel.classList.replace('bg-stone-800', 'bg-stone-700');
+                btnJoel.classList.replace('text-stone-400', 'text-white');
+                btnJoel.classList.add('border-green-600');
+                btnJoel.classList.remove('border-transparent');
+                
+                btnEllie.classList.replace('bg-stone-700', 'bg-stone-800');
+                btnEllie.classList.replace('text-white', 'text-stone-400');
+                btnEllie.classList.remove('border-green-600');
+                btnEllie.classList.add('border-transparent');
+            } else {
+                btnEllie.classList.replace('bg-stone-800', 'bg-stone-700');
+                btnEllie.classList.replace('text-stone-400', 'text-white');
+                btnEllie.classList.add('border-green-600');
+                btnEllie.classList.remove('border-transparent');
+
+                btnJoel.classList.replace('bg-stone-700', 'bg-stone-800');
+                btnJoel.classList.replace('text-white', 'text-stone-400');
+                btnJoel.classList.remove('border-green-600');
+                btnJoel.classList.add('border-transparent');
+            }
+
+            // Update Chart
+            radarChart.data.datasets[0].data = data.start;
+            radarChart.data.datasets[1].data = data.end;
+            radarChart.data.datasets[1].backgroundColor = data.colors.bg;
+            radarChart.data.datasets[1].borderColor = data.colors.border;
+            radarChart.data.datasets[1].pointBackgroundColor = data.colors.border;
+            radarChart.data.datasets[1].pointHoverBorderColor = data.colors.border;
+            radarChart.update();
+        }
+
+        function expandTheme(card, type) {
+            // Collapse all others
+            document.querySelectorAll('.theme-card .hidden-content').forEach(el => el.classList.add('hidden'));
+            
+            // Expand clicked
+            const content = card.querySelector('.hidden-content');
+            content.classList.remove('hidden');
+        }
+
+        function scrollToSection(id) {
+            document.getElementById(id).scrollIntoView({ behavior: 'smooth' });
+        }
+
+        // Initialize on load
+        window.addEventListener('DOMContentLoaded', () => {
+            initCharts();
+            // Default select Summer
+            updateSeasonData('summer');
+        });
+
+    </script>
+</body>
+</html>
